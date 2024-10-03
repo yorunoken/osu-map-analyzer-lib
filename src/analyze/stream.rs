@@ -6,6 +6,7 @@ pub struct Stream {
     map: Beatmap,
 }
 
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct StreamAnalysis {
     pub overall_confidence: f64,
@@ -151,5 +152,21 @@ impl Stream {
         }
 
         (stream_lengths, bpm_variations)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_stream_analysis() {
+        let path = Path::new("example-maps/alt-sasageyo.osu");
+        let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
+
+        let mut stream_analyzer = Stream::new(map);
+        let analasis = stream_analyzer.analyze();
+        println!("{:#?}", analasis);
     }
 }
