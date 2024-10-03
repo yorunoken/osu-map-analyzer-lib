@@ -6,8 +6,8 @@ pub struct Stream {
     map: Beatmap,
 }
 
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
 pub struct StreamAnalysis {
     pub overall_confidence: f64,
     pub short_streams: usize,
@@ -19,12 +19,16 @@ pub struct StreamAnalysis {
 }
 
 impl Stream {
-    /// Create a new stream analyzer.
+    /// Creates a new stream analyzer for the given beatmap.
+    ///
+    /// # Arguments
+    ///
+    /// * `map` - The beatmap to analyze, type: rosu_map::Beatmap.
     pub fn new(map: Beatmap) -> Self {
         Self { map }
     }
 
-    /// Analyzes a beatmap.
+    /// Analyzes the beatmap for streams and returns a `StreamAnalysis`.
     ///
     /// # Example
     ///
@@ -46,9 +50,9 @@ impl Stream {
         let hit_objects = &self.map.hit_objects;
 
         let mut max_stream_length = 0;
-        let mut total_short_streams = 0;
-        let mut total_medium_streams = 0;
-        let mut total_long_streams = 0;
+        let mut total_short_stream_count = 0;
+        let mut total_medium_stream_count = 0;
+        let mut total_long_stream_count = 0;
         let mut peak_stream_density: f64 = 0.0;
         let mut overall_bpm_consistency: f64 = 0.0;
         let mut total_stream_length = 0;
@@ -72,9 +76,9 @@ impl Stream {
             let long_streams = stream_lengths.iter().filter(|&&len| len >= 20).count();
 
             max_stream_length = max_stream_length.max(*stream_lengths.iter().max().unwrap_or(&0));
-            total_short_streams += short_streams;
-            total_medium_streams += medium_streams;
-            total_long_streams += long_streams;
+            total_short_stream_count += short_streams;
+            total_medium_stream_count += medium_streams;
+            total_long_stream_count += long_streams;
 
             total_stream_length += stream_lengths.iter().sum::<usize>();
             total_streams += stream_lengths.len();
@@ -98,10 +102,11 @@ impl Stream {
             0.0
         };
 
-        let stream_variety = (total_medium_streams * 2 + total_long_streams * 3) as f64
-            / (total_short_streams + total_medium_streams + total_long_streams).max(1) as f64;
+        let stream_variety = (total_medium_stream_count * 2 + total_long_stream_count * 3) as f64
+            / (total_short_stream_count + total_medium_stream_count + total_long_stream_count)
+                .max(1) as f64;
 
-        let long_stream_ratio = total_long_streams as f64 / total_streams.max(1) as f64;
+        let long_stream_ratio = total_long_stream_count as f64 / total_streams.max(1) as f64;
 
         let overall_confidence = (peak_stream_density * 0.3
             + overall_bpm_consistency * 0.2
@@ -112,9 +117,9 @@ impl Stream {
 
         StreamAnalysis {
             overall_confidence,
-            short_streams: total_short_streams,
-            medium_streams: total_medium_streams,
-            long_streams: total_long_streams,
+            short_streams: total_short_stream_count,
+            medium_streams: total_medium_stream_count,
+            long_streams: total_long_stream_count,
             max_stream_length,
             peak_stream_density,
             bpm_consistency: overall_bpm_consistency,
@@ -156,7 +161,7 @@ impl Stream {
 }
 
 #[cfg(test)]
-mod tests {
+mod stream_tests {
     use super::*;
     use std::path::Path;
 
