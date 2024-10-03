@@ -16,4 +16,5 @@ rosu-map = "0.1.2"
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 [features]
-serde = ["serde"]
+default = []
+serde = ["dep:serde"]
