@@ -1,5 +1,8 @@
 use crate::utils::bpm;
-use rosu_map::{section::hit_objects::HitObject, Beatmap};
+use rosu_map::{
+    section::hit_objects::{HitObject, HitObjectKind},
+    Beatmap,
+};
 use std::collections::VecDeque;
 
 pub struct Jump {
@@ -140,17 +143,22 @@ impl Jump {
         let mut jumps_lengths = Vec::new();
         let mut curr_jump = VecDeque::new();
         let mut bpm_variations = Vec::new();
-        // TODO: Add a global variable that stores the jumps' density and difficulty
         let tolerance = 0.10; // 10% tolerance
+        let distance_threshold = 120.0_f32;
 
         for pair in window.windows(2) {
-            let time_diff = pair[1].start_time - pair[0].start_time;
+            let obj1 = &pair[0];
+            let obj2 = &pair[1];
+
+            let time_diff = obj2.start_time - obj1.start_time;
+            let distance = self.calculate_distance(obj1, obj2);
 
             // Check if the pair is between expected interval.
-            if (time_diff - expected_interval).abs() / expected_interval <= tolerance {
+            if (time_diff - expected_interval).abs() / expected_interval <= tolerance
+                && distance >= distance_threshold
+            {
                 curr_jump.push_back(time_diff);
                 if curr_jump.len() > 1 {
-                    // TODO: Calculate x and y differences as well, and add them to a global variable to calculate jumps' density and difficulty
                     let prev_diff = curr_jump[curr_jump.len() - 2];
                     bpm_variations.push((time_diff - prev_diff).abs());
                 }
@@ -165,6 +173,26 @@ impl Jump {
         }
 
         (jumps_lengths, bpm_variations)
+    }
+
+    fn calculate_distance(&self, obj1: &HitObject, obj2: &HitObject) -> f32 {
+        let pos1 = match &obj1.kind {
+            HitObjectKind::Circle(circle) => circle.pos,
+            HitObjectKind::Slider(slider) => slider.pos,
+            HitObjectKind::Hold(_) => return 0.0,
+            HitObjectKind::Spinner(_) => return 0.0,
+        };
+
+        let pos2 = match &obj2.kind {
+            HitObjectKind::Circle(circle) => circle.pos,
+            HitObjectKind::Slider(slider) => slider.pos,
+            HitObjectKind::Hold(_) => return 0.0,
+            HitObjectKind::Spinner(_) => return 0.0,
+        };
+
+        let dx = pos2.x - pos1.x;
+        let dy = pos2.y - pos1.y;
+        (dx * dx + dy * dy).sqrt()
     }
 }
 
