@@ -45,7 +45,10 @@ impl Jump {
     /// println!("{:#?}", analasis);
     /// ```
     pub fn analyze(&mut self) -> JumpAnalysis {
-        let bpm = bpm(None, &self.map.control_points.timing_points);
+        let bpm = bpm(
+            self.map.hit_objects.last_mut(),
+            &self.map.control_points.timing_points,
+        );
         let beat_length = 60.0 / bpm * 1000.0;
         let expected_jump_interval = beat_length / 2.0; // 1/2ths
 

@@ -41,7 +41,10 @@ impl Stream {
     /// println!("{:#?}", analasis);
     /// ```
     pub fn analyze(&mut self) -> StreamAnalysis {
-        let bpm = bpm(None, &self.map.control_points.timing_points);
+        let bpm = bpm(
+            self.map.hit_objects.last_mut(),
+            &self.map.control_points.timing_points,
+        );
         let beat_length = 60.0 / bpm * 1000.0;
         let expected_stream_interval = beat_length / 4.0; // 1/4ths
 
@@ -167,7 +170,7 @@ mod stream_tests {
 
     #[test]
     fn test_stream_analysis() {
-        let path = Path::new("example-maps/alt-sasageyo.osu");
+        let path = Path::new("example-maps/stream-jashin.osu");
         let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
 
         let mut stream_analyzer = Stream::new(map);
