@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use rosu_map::section::{hit_objects::HitObject, timing_points::TimingPoint};
+use rosu_map::section::{
+    hit_objects::{HitObject, HitObjectKind},
+    timing_points::TimingPoint,
+};
 
 pub fn bpm(last_hit_object: Option<&mut HitObject>, timing_points: &[TimingPoint]) -> f64 {
     let last_time = last_hit_object
@@ -33,6 +36,26 @@ pub fn bpm(last_hit_object: Option<&mut HitObject>, timing_points: &[TimingPoint
         .map_or(0.0, |(beatmap_len, _)| f64::from_bits(beatmap_len));
 
     (60_000.0 / most_common_beat_len).max(1.0)
+}
+
+pub fn calculate_distance(obj1: &HitObject, obj2: &HitObject) -> f32 {
+    let pos1 = match &obj1.kind {
+        HitObjectKind::Circle(circle) => circle.pos,
+        HitObjectKind::Slider(slider) => slider.pos,
+        HitObjectKind::Hold(_) => return 0.0,
+        HitObjectKind::Spinner(_) => return 0.0,
+    };
+
+    let pos2 = match &obj2.kind {
+        HitObjectKind::Circle(circle) => circle.pos,
+        HitObjectKind::Slider(slider) => slider.pos,
+        HitObjectKind::Hold(_) => return 0.0,
+        HitObjectKind::Spinner(_) => return 0.0,
+    };
+
+    let dx = pos2.x - pos1.x;
+    let dy = pos2.y - pos1.y;
+    (dx * dx + dy * dy).sqrt()
 }
 
 struct BeatLenDuration {
