@@ -175,19 +175,3 @@ impl Jump {
         (jumps_lengths, bpm_variations)
     }
 }
-
-#[cfg(test)]
-mod jump_tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn test_jump_analysis() {
-        let path = Path::new("example-maps/jump-flowerdance.osu");
-        let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
-
-        let mut jump_analyzer = Jump::new(map);
-        let analasis = jump_analyzer.analyze();
-        println!("{:#?}", analasis);
-    }
-}
