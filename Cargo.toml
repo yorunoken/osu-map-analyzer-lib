@@ -1,6 +1,6 @@
 [package]
 name = "osu-map-analyzer"
-version = "0.2.2"
+version = "0.2.5"
 authors = ["yorunoken <me@yorunoken.com>"]
 edition = "2021"
 description = "A library for analyzing osu! beatmaps"
