@@ -70,7 +70,7 @@ impl Stream {
 
             let short_streams = stream_lengths
                 .iter()
-                .filter(|&&len| len >= 5 && len < 10)
+                .filter(|&&len| len >= 6 && len < 10)
                 .count();
             let medium_streams = stream_lengths
                 .iter()
