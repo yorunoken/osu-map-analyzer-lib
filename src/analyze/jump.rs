@@ -73,7 +73,7 @@ impl Jump {
 
             let short_jumps = jumps_lengths
                 .iter()
-                .filter(|&&len| len > 2 && len < 10)
+                .filter(|&&len| len > 5 && len < 10)
                 .count();
             let medium_jumps = jumps_lengths
                 .iter()
