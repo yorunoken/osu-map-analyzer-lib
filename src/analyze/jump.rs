@@ -1,8 +1,5 @@
-use crate::utils::bpm;
-use rosu_map::{
-    section::hit_objects::{HitObject, HitObjectKind},
-    Beatmap,
-};
+use crate::utils::{bpm, calculate_distance};
+use rosu_map::{section::hit_objects::HitObject, Beatmap};
 use std::collections::VecDeque;
 
 pub struct Jump {
@@ -119,10 +116,10 @@ impl Jump {
 
         let long_jump_ratio = total_long_jump_count as f64 / total_jumps as f64;
 
-        let overall_confidence = (peak_jump_density * 0.3
+        let overall_confidence = (peak_jump_density * 0.4
             + overall_bpm_consistency * 0.2
-            + jump_variety * 0.38
-            + long_jump_ratio * 0.3
+            + jump_variety * 0.35
+            + long_jump_ratio * 0.45
             + (average_jump_length / 3.0).min(1.0) * 0.3)
             .min(1.0);
 
@@ -154,7 +151,7 @@ impl Jump {
             let obj2 = &pair[1];
 
             let time_diff = obj2.start_time - obj1.start_time;
-            let distance = self.calculate_distance(obj1, obj2);
+            let distance = calculate_distance(obj1, obj2);
 
             // Check if the pair is between expected interval.
             if (time_diff - expected_interval).abs() / expected_interval <= tolerance
@@ -176,26 +173,6 @@ impl Jump {
         }
 
         (jumps_lengths, bpm_variations)
-    }
-
-    fn calculate_distance(&self, obj1: &HitObject, obj2: &HitObject) -> f32 {
-        let pos1 = match &obj1.kind {
-            HitObjectKind::Circle(circle) => circle.pos,
-            HitObjectKind::Slider(slider) => slider.pos,
-            HitObjectKind::Hold(_) => return 0.0,
-            HitObjectKind::Spinner(_) => return 0.0,
-        };
-
-        let pos2 = match &obj2.kind {
-            HitObjectKind::Circle(circle) => circle.pos,
-            HitObjectKind::Slider(slider) => slider.pos,
-            HitObjectKind::Hold(_) => return 0.0,
-            HitObjectKind::Spinner(_) => return 0.0,
-        };
-
-        let dx = pos2.x - pos1.x;
-        let dy = pos2.y - pos1.y;
-        (dx * dx + dy * dy).sqrt()
     }
 }
 
