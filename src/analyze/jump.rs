@@ -11,11 +11,13 @@ pub struct Jump {
 pub struct JumpAnalysis {
     pub overall_confidence: f64,
     pub total_jump_count: usize,
+
     pub max_jump_length: usize,
-    pub short_jumps_count: usize,
-    pub medium_jumps_count: usize,
-    pub long_jumps_count: usize,
-    pub peak_jump_density: f64,
+    pub long_jumps: usize,
+    pub medium_jumps: usize,
+    pub short_jumps: usize,
+
+    pub jump_density: f64,
     pub bpm_consistency: f64,
 }
 
@@ -48,96 +50,77 @@ impl Jump {
         );
         let beat_length = 60.0 / bpm * 1000.0;
         let expected_jump_interval = beat_length / 2.0; // 1/2ths
-
-        let window_size = 200;
-        let step_size = 50;
         let hit_objects = &self.map.hit_objects;
 
-        let mut max_jump_length = 0;
-        let mut peak_jump_density = 0.0_f64;
+        let (consecutive_notes, bpm_variations) =
+            self.calculate_consecutive_notes(hit_objects, expected_jump_interval);
 
-        let mut total_short_jump_count = 0;
-        let mut total_medium_jump_count = 0;
-        let mut total_long_jump_count = 0;
+        // Calculate jumps' lengths
+        let short_jumps_amount = consecutive_notes
+            .iter()
+            .filter(|&&len| len >= 4 && len < 7)
+            .count();
+        let medium_jumps_amount = consecutive_notes
+            .iter()
+            .filter(|&&len| len >= 7 && len < 12)
+            .count();
+        let long_jumps_amount = consecutive_notes.iter().filter(|&&len| len >= 12).count();
 
-        let mut overall_bpm_consistency: f64 = 0.0;
-        let mut total_jump_notes_length = 0;
-        let mut total_jumps = 0;
+        // Filter `consecutive_notes` to only have note amount higher than `5`,
+        // because `consecutive_notes` returns the consecutive notes, `not` jumps.
+        // Extremely short jumps could still be counted as jumps if I don't do this.
+        let jumps_lengths: Vec<usize> = consecutive_notes
+            .iter()
+            .filter(|&&len| len >= 4)
+            .map(|&len| len)
+            .collect();
 
-        for window_start in (0..hit_objects.len()).step_by(step_size) {
-            let window_end = (window_start + window_size).min(hit_objects.len());
-            let window = &hit_objects[window_start..window_end];
+        let total_jump_notes: usize = jumps_lengths.iter().sum();
+        let jump_density = total_jump_notes as f64 / hit_objects.len() as f64;
 
-            let (jumps_lengths, bpm_variations) =
-                self.analyze_window(window, expected_jump_interval);
+        let max_jump_length = *consecutive_notes.iter().max().unwrap_or(&0);
+        let total_jumps_amount = short_jumps_amount + medium_jumps_amount + long_jumps_amount;
 
-            let short_jumps = jumps_lengths
-                .iter()
-                .filter(|&&len| len > 5 && len < 10)
-                .count();
-            let medium_jumps = jumps_lengths
-                .iter()
-                .filter(|&&len| len >= 10 && len < 20)
-                .count();
-            let long_jumps = jumps_lengths.iter().filter(|&&len| len >= 20).count();
-
-            total_short_jump_count += short_jumps;
-            total_medium_jump_count += medium_jumps;
-            total_long_jump_count += long_jumps;
-
-            let total_jump_notes: usize = jumps_lengths.iter().sum();
-            let jump_density = total_jump_notes as f64 / window.len() as f64;
-            peak_jump_density = peak_jump_density.max(jump_density);
-
-            max_jump_length = max_jump_length.max(*jumps_lengths.iter().max().unwrap_or(&0));
-
-            total_jump_notes_length += jumps_lengths.iter().sum::<usize>();
-            total_jumps += jumps_lengths.len();
-
-            let bpm_consistency = if !bpm_variations.is_empty() {
-                1.0 - (bpm_variations.iter().sum::<f64>() / bpm_variations.len() as f64)
-                    / expected_jump_interval
-            } else {
-                0.0
-            };
-
-            overall_bpm_consistency = overall_bpm_consistency.max(bpm_consistency);
-        }
-
-        let average_jump_length = if total_jumps > 0 {
-            total_jump_notes_length as f64 / total_jumps as f64
+        let bpm_consistency = if !bpm_variations.is_empty() {
+            1.0 - (bpm_variations.iter().sum::<f64>() / bpm_variations.len() as f64)
+                / expected_jump_interval
         } else {
             0.0
         };
 
-        let jump_variety = (total_medium_jump_count * 2 + total_long_jump_count * 3) as f64
-            / (total_short_jump_count + total_medium_jump_count + total_long_jump_count).max(1)
-                as f64;
+        let average_jump_length = if total_jumps_amount > 0 {
+            total_jump_notes as f64 / total_jumps_amount as f64
+        } else {
+            0.0
+        };
 
-        let long_jump_ratio = total_long_jump_count as f64 / total_jumps as f64;
+        let jump_variety = (medium_jumps_amount * 2 + long_jumps_amount * 3) as f64
+            / (short_jumps_amount + medium_jumps_amount + long_jumps_amount).max(1) as f64;
 
-        let overall_confidence = (peak_jump_density * 0.4
-            + overall_bpm_consistency * 0.2
+        let long_jump_ratio = long_jumps_amount as f64 / total_jumps_amount as f64;
+
+        let overall_confidence = (jump_density * 0.4
+            + bpm_consistency * 0.2
             + jump_variety * 0.35
             + long_jump_ratio * 0.45
             + (average_jump_length / 3.0).min(1.0) * 0.3)
             .min(1.0);
 
         JumpAnalysis {
-            long_jumps_count: total_long_jump_count,
-            medium_jumps_count: total_medium_jump_count,
-            short_jumps_count: total_short_jump_count,
+            long_jumps: long_jumps_amount,
+            medium_jumps: medium_jumps_amount,
+            short_jumps: short_jumps_amount,
             max_jump_length,
-            total_jump_count: total_jumps,
+            total_jump_count: total_jumps_amount,
             overall_confidence,
-            peak_jump_density,
-            bpm_consistency: overall_bpm_consistency,
+            jump_density,
+            bpm_consistency,
         }
     }
 
-    fn analyze_window(
+    fn calculate_consecutive_notes(
         &self,
-        window: &[HitObject],
+        hit_objects: &[HitObject],
         expected_interval: f64,
     ) -> (Vec<usize>, Vec<f64>) {
         let mut jumps_lengths = Vec::new();
@@ -146,7 +129,7 @@ impl Jump {
         let tolerance = 0.10; // 10% tolerance
         let distance_threshold = 120.0_f32;
 
-        for pair in window.windows(2) {
+        for pair in hit_objects.windows(2) {
             let obj1 = &pair[0];
             let obj2 = &pair[1];
 
