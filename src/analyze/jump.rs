@@ -40,7 +40,7 @@ impl Jump {
     /// let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
 
     /// let mut jump_analyzer = Jump::new(map);
-    /// let analasis = jump_analyzer.analyze();
+    /// let analysis = jump_analyzer.analyze();
     /// println!("{:#?}", analasis);
     /// ```
     pub fn analyze(&mut self) -> JumpAnalysis {

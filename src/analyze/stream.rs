@@ -38,7 +38,7 @@ impl Stream {
     /// let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
     ///
     /// let mut stream_analyzer = Stream::new(map);
-    /// let analasis = stream_analyzer.analyze();
+    /// let analysis = stream_analyzer.analyze();
     /// println!("{:#?}", analasis);
     /// ```
     pub fn analyze(&mut self) -> StreamAnalysis {
