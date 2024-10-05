@@ -55,7 +55,7 @@ pub fn calculate_distance(obj1: &HitObject, obj2: &HitObject) -> f32 {
 
     let dx = pos2.x - pos1.x;
     let dy = pos2.y - pos1.y;
-    (dx * dx + dy * dy).sqrt()
+    (dx.powi(2) + dy.powi(2)).sqrt()
 }
 
 struct BeatLenDuration {
