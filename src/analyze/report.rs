@@ -31,6 +31,14 @@ impl BeatmapAnalysis {
             self.metadata.creator, self.metadata.version
         )
         .unwrap();
+        writeln!(
+            output,
+            "Mods: {}  Rate: {}x",
+            format_mods(self),
+            format_rate(self.rate)
+        )
+        .unwrap();
+        writeln!(output, "Star rating: {}", format_star_rating(self)).unwrap();
         writeln!(output, "Objects: {}", self.general.object_count).unwrap();
         writeln!(
             output,
@@ -101,6 +109,14 @@ impl BeatmapAnalysis {
         .unwrap();
 
         writeln!(output, "\nGeneral").unwrap();
+        writeln!(
+            output,
+            "  Mods: {}  Rate: {}x",
+            format_mods(self),
+            format_rate(self.rate)
+        )
+        .unwrap();
+        writeln!(output, "  Star rating: {}", format_star_rating(self)).unwrap();
         writeln!(output, "  Objects: {}", self.general.object_count).unwrap();
         writeln!(
             output,
@@ -358,6 +374,20 @@ impl BeatmapAnalysis {
         validate_sorted(self, &mut report);
         validate_last_section(self, &mut report);
         validate_pressure_ranges(self, &mut report);
+        if self.rate.is_finite() && self.rate > 0.0 {
+            report.passed.push("playback rate is positive".into());
+        } else {
+            report
+                .errors
+                .push(format!("playback rate must be positive, got {}", self.rate));
+        }
+        if self.star_rating_nomod.is_none() || self.star_rating_adjusted.is_none() {
+            report
+                .warnings
+                .push("star rating is unavailable for this map".into());
+        } else {
+            report.passed.push("star ratings are available".into());
+        }
 
         let equal_bpm = self
             .timing
@@ -437,6 +467,7 @@ fn validate_finite_values(
         ),
         ("general.total_length", analysis.general.total_length),
         ("general.drain_time", analysis.general.drain_time),
+        ("rate", analysis.rate),
         ("timing.main_bpm", analysis.timing.main_bpm),
         ("timing.average_bpm", analysis.timing.average_bpm),
         ("timing.min_bpm", analysis.timing.min_bpm),
@@ -476,8 +507,16 @@ fn validate_finite_values(
             analysis.objects.jump_distances.p50,
         ),
         (
+            "objects.jump_distances.p75",
+            analysis.objects.jump_distances.p75,
+        ),
+        (
             "objects.jump_distances.p90",
             analysis.objects.jump_distances.p90,
+        ),
+        (
+            "objects.jump_distances.p95",
+            analysis.objects.jump_distances.p95,
         ),
         ("rhythm.timing_gaps.min", analysis.rhythm.timing_gaps.min),
         ("rhythm.timing_gaps.max", analysis.rhythm.timing_gaps.max),
@@ -487,7 +526,9 @@ fn validate_finite_values(
             analysis.rhythm.timing_gaps.standard_deviation,
         ),
         ("rhythm.timing_gaps.p50", analysis.rhythm.timing_gaps.p50),
+        ("rhythm.timing_gaps.p75", analysis.rhythm.timing_gaps.p75),
         ("rhythm.timing_gaps.p90", analysis.rhythm.timing_gaps.p90),
+        ("rhythm.timing_gaps.p95", analysis.rhythm.timing_gaps.p95),
         ("rhythm.variety", analysis.rhythm.variety),
         ("rhythm.entropy", analysis.rhythm.entropy),
         ("rhythm.burstiness", analysis.rhythm.burstiness),
@@ -546,6 +587,12 @@ fn validate_finite_values(
     ];
     for (name, value) in fixed_values {
         check(name, value);
+    }
+    if let Some(value) = analysis.star_rating_nomod {
+        check("star_rating_nomod", value);
+    }
+    if let Some(value) = analysis.star_rating_adjusted {
+        check("star_rating_adjusted", value);
     }
     for (index, interval) in analysis.rhythm.common_note_lengths.iter().enumerate() {
         check(
@@ -682,6 +729,44 @@ fn validate_pressure_ranges(analysis: &BeatmapAnalysis, report: &mut ValidationR
         report
             .errors
             .push("an aim pressure score is negative".into());
+    }
+}
+
+fn format_mods(analysis: &BeatmapAnalysis) -> String {
+    if analysis.mods.is_empty() {
+        "NM".to_owned()
+    } else {
+        analysis
+            .mods
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("")
+    }
+}
+
+fn format_rate(rate: f64) -> String {
+    let rendered = format_number(rate, 3);
+    if rendered.contains('.') {
+        rendered
+    } else {
+        format!("{rendered}.0")
+    }
+}
+
+fn format_star_rating(analysis: &BeatmapAnalysis) -> String {
+    match (analysis.star_rating_nomod, analysis.star_rating_adjusted) {
+        (Some(nomod), Some(_adjusted))
+            if analysis.mods.is_empty() && (analysis.rate - 1.0).abs() <= 1e-9 =>
+        {
+            format_number(nomod, 2)
+        }
+        (Some(nomod), Some(adjusted)) => format!(
+            "{} NM / {} adjusted",
+            format_number(nomod, 2),
+            format_number(adjusted, 2)
+        ),
+        _ => "unavailable".to_owned(),
     }
 }
 
@@ -842,6 +927,8 @@ SliderTickRate:1
     fn compact_report_does_not_dump_section_arrays() {
         let report = analysis().compact_report();
 
+        assert!(report.contains("Mods: NM  Rate: 1.0x"));
+        assert!(report.contains("Star rating:"));
         assert!(!report.contains("TimingSection"));
         assert!(!report.contains("SectionAnalysis"));
         assert!(!report.contains("start_time"));

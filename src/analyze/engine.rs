@@ -6,16 +6,20 @@ use rosu_map::{
 };
 
 use super::model::*;
+use super::stats::{max, mean, percentile, ratio, safe_div, standard_deviation};
 
 /// Parses and extracts reusable analysis features from an osu! beatmap.
 pub struct BeatmapAnalyzer {
     map: Beatmap,
+    difficulty_map: Option<rosu_pp::Beatmap>,
 }
 
 #[derive(Debug)]
 pub enum AnalysisError {
     Parse(io::Error),
     InvalidSectionLength(f64),
+    InvalidRate(f64),
+    ConflictingRateMods,
 }
 
 impl fmt::Display for AnalysisError {
@@ -25,6 +29,13 @@ impl fmt::Display for AnalysisError {
             Self::InvalidSectionLength(value) => {
                 write!(f, "section length must be finite and positive, got {value}")
             }
+            Self::InvalidRate(value) => {
+                write!(f, "playback rate must be finite and positive, got {value}")
+            }
+            Self::ConflictingRateMods => write!(
+                f,
+                "DT/NC and HT imply conflicting playback rates; provide an explicit rate"
+            ),
         }
     }
 }
@@ -33,7 +44,9 @@ impl std::error::Error for AnalysisError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Parse(err) => Some(err),
-            Self::InvalidSectionLength(_) => None,
+            Self::InvalidSectionLength(_) | Self::InvalidRate(_) | Self::ConflictingRateMods => {
+                None
+            }
         }
     }
 }
@@ -64,8 +77,10 @@ struct ObjectSample {
 impl BeatmapAnalyzer {
     /// Parses a beatmap from a `.osu` file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, AnalysisError> {
+        let path = path.as_ref();
         Ok(Self {
             map: Beatmap::from_path(path)?,
+            difficulty_map: rosu_pp::Beatmap::from_path(path).ok(),
         })
     }
 
@@ -73,12 +88,16 @@ impl BeatmapAnalyzer {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, AnalysisError> {
         Ok(Self {
             map: Beatmap::from_bytes(bytes)?,
+            difficulty_map: rosu_pp::Beatmap::from_bytes(bytes).ok(),
         })
     }
 
     /// Wraps an already parsed beatmap.
     pub fn from_beatmap(map: Beatmap) -> Self {
-        Self { map }
+        Self {
+            map,
+            difficulty_map: None,
+        }
     }
 
     /// Returns the underlying parsed beatmap.
@@ -91,8 +110,9 @@ impl BeatmapAnalyzer {
         if !options.section_length.is_finite() || options.section_length <= 0.0 {
             return Err(AnalysisError::InvalidSectionLength(options.section_length));
         }
+        let (mods, rate) = resolve_mods_and_rate(options.mods, options.rate)?;
 
-        let objects = collect_objects(&self.map);
+        let objects = collect_objects(&self.map, rate);
         let starts: Vec<f64> = objects.iter().map(|o| o.start).collect();
         let gaps: Vec<f64> = starts.windows(2).map(|w| w[1] - w[0]).collect();
         let distances = object_distances(&self.map);
@@ -100,7 +120,7 @@ impl BeatmapAnalyzer {
         let first_time = starts.first().copied().unwrap_or(0.0).max(0.0);
         let playable_length = (total_length - first_time).max(0.0);
         let drain_time =
-            (playable_length - break_duration(&self.map, first_time, total_length)).max(0.0);
+            (playable_length - break_duration(&self.map, first_time, total_length, rate)).max(0.0);
         let duration_seconds = playable_length / 1000.0;
 
         let metadata = metadata(&self.map);
@@ -113,7 +133,7 @@ impl BeatmapAnalyzer {
             total_length,
             object_count: objects.len(),
         };
-        let timing = timing_analysis(&self.map, total_length);
+        let timing = timing_analysis(&self.map, total_length, rate);
         let object_analysis = object_analysis(&objects, &distances, duration_seconds);
         let rhythm = rhythm_analysis(&gaps);
         let (aim, aim_pressures) = aim_analysis(&self.map, &distances, &gaps);
@@ -131,7 +151,7 @@ impl BeatmapAnalyzer {
                 }
             })
             .collect();
-        let streams = stream_analysis(&self.map, &distances);
+        let streams = stream_analysis(&self.map, &distances, rate);
         let sections = section_analysis(
             &objects,
             &gaps,
@@ -145,6 +165,8 @@ impl BeatmapAnalyzer {
         let speed = speed_analysis(&starts, &gaps, &speed_pressures, &sections);
         let sliders = slider_analysis(&self.map, &objects, duration_seconds, &slider_pressures);
         let tags = tags(&object_analysis, &rhythm, &aim, &speed, &streams, &sliders);
+        let (star_rating_nomod, star_rating_adjusted) =
+            calculate_star_ratings(self.difficulty_map.as_ref(), &mods, rate);
 
         Ok(BeatmapAnalysis {
             metadata,
@@ -158,17 +180,79 @@ impl BeatmapAnalyzer {
             sliders,
             sections,
             tags,
+            mods,
+            rate,
+            star_rating_nomod,
+            star_rating_adjusted,
         })
     }
 }
 
-fn collect_objects(map: &Beatmap) -> Vec<ObjectSample> {
+fn resolve_mods_and_rate(
+    mut mods: Vec<GameMod>,
+    explicit_rate: Option<f64>,
+) -> Result<(Vec<GameMod>, f64), AnalysisError> {
+    mods.sort_unstable();
+    mods.dedup();
+
+    if let Some(rate) = explicit_rate {
+        if !rate.is_finite() || rate <= 0.0 {
+            return Err(AnalysisError::InvalidRate(rate));
+        }
+
+        return Ok((mods, rate));
+    }
+
+    let faster = mods
+        .iter()
+        .any(|game_mod| matches!(game_mod, GameMod::DT | GameMod::NC));
+    let slower = mods.contains(&GameMod::HT);
+    let rate = match (faster, slower) {
+        (true, true) => return Err(AnalysisError::ConflictingRateMods),
+        (true, false) => 1.5,
+        (false, true) => 0.75,
+        (false, false) => 1.0,
+    };
+
+    Ok((mods, rate))
+}
+
+fn calculate_star_ratings(
+    map: Option<&rosu_pp::Beatmap>,
+    mods: &[GameMod],
+    rate: f64,
+) -> (Option<f64>, Option<f64>) {
+    let Some(map) = map else {
+        return (None, None);
+    };
+    let nomod = rosu_pp::Difficulty::new()
+        .checked_calculate(map)
+        .ok()
+        .map(|attributes| attributes.stars())
+        .filter(|stars| stars.is_finite());
+    let mod_bits = mods
+        .iter()
+        .fold(0_u32, |bits, game_mod| bits | game_mod.legacy_bits());
+    let adjusted = (0.01..=100.0).contains(&rate).then(|| {
+        rosu_pp::Difficulty::new()
+            .mods(mod_bits)
+            .clock_rate(rate)
+            .checked_calculate(map)
+            .ok()
+            .map(|attributes| attributes.stars())
+            .filter(|stars| stars.is_finite())
+    });
+
+    (nomod, adjusted.flatten())
+}
+
+fn collect_objects(map: &Beatmap, rate: f64) -> Vec<ObjectSample> {
     let mut cloned = map.hit_objects.clone();
     cloned
         .iter_mut()
         .map(|object| {
-            let start = object.start_time;
-            let end = object.end_time();
+            let start = object.start_time / rate;
+            let end = object.end_time() / rate;
             let (kind, slider_duration, slider_complexity) = match &object.kind {
                 HitObjectKind::Circle(_) => (Kind::Circle, 0.0, 0.0),
                 HitObjectKind::Slider(v) => (
@@ -207,18 +291,18 @@ fn metadata(map: &Beatmap) -> BeatmapMetadata {
     }
 }
 
-fn break_duration(map: &Beatmap, start: f64, end: f64) -> f64 {
+fn break_duration(map: &Beatmap, start: f64, end: f64, rate: f64) -> f64 {
     map.breaks
         .iter()
         .map(|b| {
-            let break_start = b.start_time.max(start);
-            let break_end = b.end_time.min(end);
+            let break_start = (b.start_time / rate).max(start);
+            let break_end = (b.end_time / rate).min(end);
             (break_end - break_start).max(0.0)
         })
         .sum()
 }
 
-fn timing_analysis(map: &Beatmap, total_length: f64) -> TimingAnalysis {
+fn timing_analysis(map: &Beatmap, total_length: f64, rate: f64) -> TimingAnalysis {
     let points = &map.control_points.timing_points;
     let mut sections = Vec::with_capacity(points.len());
     let mut weighted_bpm = 0.0;
@@ -227,13 +311,14 @@ fn timing_analysis(map: &Beatmap, total_length: f64) -> TimingAnalysis {
     let mut bpms = Vec::with_capacity(points.len());
 
     for (index, point) in points.iter().enumerate() {
-        let bpm = 60_000.0 / point.beat_len;
+        let bpm = 60_000.0 / point.beat_len * rate;
         let end = points
             .get(index + 1)
-            .map_or(total_length.max(point.time), |p| p.time);
-        let duration = (end - point.time.max(0.0)).max(0.0);
+            .map_or(total_length.max(point.time / rate), |p| p.time / rate);
+        let start = point.time / rate;
+        let duration = (end - start.max(0.0)).max(0.0);
         sections.push(TimingSection {
-            start_time: point.time,
+            start_time: start,
             end_time: end,
             bpm,
         });
@@ -247,7 +332,7 @@ fn timing_analysis(map: &Beatmap, total_length: f64) -> TimingAnalysis {
     let main_bpm = durations
         .into_iter()
         .max_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(bits, _)| 60_000.0 / (f64::from_bits(bits) / 1000.0))
+        .map(|(bits, _)| 60_000.0 / (f64::from_bits(bits) / 1000.0) * rate)
         .unwrap_or(0.0);
     let average_bpm = if weighted_duration > 0.0 {
         weighted_bpm / weighted_duration
@@ -316,10 +401,10 @@ fn object_analysis(
         slider_count: sliders,
         spinner_count: spinners,
         hold_count: holds,
-        circle_ratio: ratio(circles, total),
-        slider_ratio: ratio(sliders, total),
-        spinner_ratio: ratio(spinners, total),
-        hold_ratio: ratio(holds, total),
+        circle_ratio: ratio(circles, objects.len()),
+        slider_ratio: ratio(sliders, objects.len()),
+        spinner_ratio: ratio(spinners, objects.len()),
+        hold_ratio: ratio(holds, objects.len()),
         object_density: safe_div(total, duration_seconds),
         notes_per_second: safe_div(total, duration_seconds),
         average_spacing: stats.mean,
@@ -435,19 +520,19 @@ fn aim_analysis(map: &Beatmap, distances: &[Option<f64>], gaps: &[f64]) -> (AimA
     )
 }
 
-fn stream_analysis(map: &Beatmap, distances: &[Option<f64>]) -> StreamsAnalysis {
+fn stream_analysis(map: &Beatmap, distances: &[Option<f64>], rate: f64) -> StreamsAnalysis {
     let mut runs: Vec<(usize, f64, f64)> = Vec::new();
     let mut run_notes = 0;
     let mut interval_sum = 0.0;
     let mut distance_sum = 0.0;
     for (i, pair) in map.hit_objects.windows(2).enumerate() {
-        let gap = pair[1].start_time - pair[0].start_time;
+        let gap = (pair[1].start_time - pair[0].start_time) / rate;
         let beat_len = map
             .control_points
             .timing_point_at(pair[0].start_time)
             .map(|p| p.beat_len)
             .unwrap_or(500.0);
-        let expected = beat_len / 4.0;
+        let expected = beat_len / rate / 4.0;
         if gap > 0.0 && ((gap - expected).abs() / expected.max(1.0)) <= 0.2 {
             if run_notes == 0 {
                 run_notes = 1;
@@ -661,7 +746,7 @@ fn tags(
         tags.push(MapTag::Stamina);
     }
     if objects.slider_ratio >= 0.45 {
-        tags.push(MapTag::SliderHeavy);
+        tags.push(MapTag::Slider);
     }
     if aim.angle_sharpness >= 0.55 && aim.pressure_score_mean >= 0.7 {
         tags.push(MapTag::AimControl);
@@ -688,43 +773,24 @@ fn distribution(values: &[f64]) -> Distribution {
             mean: 0.0,
             standard_deviation: 0.0,
             p50: 0.0,
+            p75: 0.0,
             p90: 0.0,
+            p95: 0.0,
             sample_count: 0,
         };
     }
     let avg = mean(values);
-    let variance = values.iter().map(|v| (v - avg).powi(2)).sum::<f64>() / values.len() as f64;
-    let mut sorted = values.to_vec();
-    sorted.sort_by(f64::total_cmp);
     Distribution {
-        min: sorted[0],
-        max: sorted[sorted.len() - 1],
+        min: super::stats::min(values),
+        max: max(values),
         mean: avg,
-        standard_deviation: variance.sqrt(),
-        p50: percentile(&sorted, 0.5),
-        p90: percentile(&sorted, 0.9),
+        standard_deviation: standard_deviation(values),
+        p50: percentile(values, 0.5),
+        p75: percentile(values, 0.75),
+        p90: percentile(values, 0.9),
+        p95: percentile(values, 0.95),
         sample_count: values.len(),
     }
-}
-
-fn percentile(sorted: &[f64], p: f64) -> f64 {
-    sorted[((sorted.len() - 1) as f64 * p).round() as usize]
-}
-fn mean(values: &[f64]) -> f64 {
-    safe_div(values.iter().sum(), values.len() as f64)
-}
-fn max(values: &[f64]) -> f64 {
-    values.iter().copied().reduce(f64::max).unwrap_or(0.0)
-}
-fn safe_div(value: f64, divisor: f64) -> f64 {
-    if divisor > 0.0 {
-        value / divisor
-    } else {
-        0.0
-    }
-}
-fn ratio(value: usize, total: f64) -> f64 {
-    safe_div(value as f64, total)
 }
 fn mean_selected(values: &[f64], indices: &[usize], transition: bool) -> f64 {
     let selected: Vec<f64> = indices
