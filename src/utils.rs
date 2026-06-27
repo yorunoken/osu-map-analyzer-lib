@@ -35,7 +35,11 @@ pub fn bpm(last_hit_object: Option<&mut HitObject>, timing_points: &[TimingPoint
         .max_by(|(_, a), (_, b)| a.total_cmp(b))
         .map_or(0.0, |(beatmap_len, _)| f64::from_bits(beatmap_len));
 
-    (60_000.0 / most_common_beat_len).max(1.0)
+    if most_common_beat_len > 0.0 {
+        (60_000.0 / most_common_beat_len).max(1.0)
+    } else {
+        120.0
+    }
 }
 
 pub fn calculate_distance(obj1: &HitObject, obj2: &HitObject) -> f32 {

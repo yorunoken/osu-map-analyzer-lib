@@ -38,7 +38,7 @@ impl Jump {
     /// ```rs
     /// let path = Path::new("example-maps/jump-caffeinefighter.osu");
     /// let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
-
+    ///
     /// let mut jump_analyzer = Jump::new(map);
     /// let analysis = jump_analyzer.analyze();
     /// println!("{:#?}", analasis);
@@ -58,11 +58,11 @@ impl Jump {
         // Calculate jumps' lengths
         let short_jumps_amount = consecutive_notes
             .iter()
-            .filter(|&&len| len >= 4 && len < 7)
+            .filter(|&&len| (4..7).contains(&len))
             .count();
         let medium_jumps_amount = consecutive_notes
             .iter()
-            .filter(|&&len| len >= 7 && len < 12)
+            .filter(|&&len| (7..12).contains(&len))
             .count();
         let long_jumps_amount = consecutive_notes.iter().filter(|&&len| len >= 12).count();
 
@@ -72,7 +72,7 @@ impl Jump {
         let jumps_lengths: Vec<usize> = consecutive_notes
             .iter()
             .filter(|&&len| len >= 4)
-            .map(|&len| len)
+            .copied()
             .collect();
 
         let total_jump_notes: usize = jumps_lengths.iter().sum();
@@ -97,7 +97,7 @@ impl Jump {
         let jump_variety = (medium_jumps_amount * 2 + long_jumps_amount * 3) as f64
             / (short_jumps_amount + medium_jumps_amount + long_jumps_amount).max(1) as f64;
 
-        let long_jump_ratio = long_jumps_amount as f64 / total_jumps_amount as f64;
+        let long_jump_ratio = long_jumps_amount as f64 / total_jumps_amount.max(1) as f64;
 
         let overall_confidence = (jump_density * 0.4
             + bpm_consistency * 0.2

@@ -1,2 +1,5 @@
 /target
 /example-maps
+/tests/maps/**/*.osu
+/tests/maps/*.osu
+/tests/output

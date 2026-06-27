@@ -54,18 +54,18 @@ impl Stream {
         let (consecutive_notes, bpm_variations) =
             self.calculate_consecutive_notes(hit_objects, expected_stream_interval);
 
-        let bursts_amount = consecutive_notes
+        let _bursts_amount = consecutive_notes
             .iter()
-            .filter(|&&len| len >= 3 && len <= 5)
+            .filter(|&&len| (3..=5).contains(&len))
             .count();
 
         let short_streams_amount = consecutive_notes
             .iter()
-            .filter(|&&len| len >= 6 && len < 10)
+            .filter(|&&len| (6..10).contains(&len))
             .count();
         let medium_streams_amount = consecutive_notes
             .iter()
-            .filter(|&&len| len >= 10 && len < 20)
+            .filter(|&&len| (10..20).contains(&len))
             .count();
         let long_streams_amount = consecutive_notes.iter().filter(|&&len| len >= 20).count();
 
@@ -75,7 +75,7 @@ impl Stream {
         let streams_lengths: Vec<usize> = consecutive_notes
             .iter()
             .filter(|&&len| len >= 6)
-            .map(|&len| len)
+            .copied()
             .collect();
 
         let total_stream_notes: usize = streams_lengths.iter().sum();

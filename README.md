@@ -3,68 +3,81 @@
 
 # osu-map-analyzer
 
-A Rust library for analyzing osu! beatmaps, and determines what class it is (stream, jump, tech, etc).
+A reusable feature extraction library for osu! beatmaps. It parses `.osu` files through
+[`rosu-map`](https://github.com/MaxOhn/rosu-map) and produces human-readable metrics,
+timeline sections, deterministic map tags, and a stable flat feature vector.
 
 ## Installation
-
-Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
 osu-map-analyzer = "0.2.9"
 ```
 
-or simply run `cargo add osu-map-analyzer` for the latest version
+JSON serialization is enabled by default for all analysis output types. It can be
+disabled with `default-features = false` if a consumer does not need it.
 
-## Usage
-
-Here's a basic example of how to use the library:
-
-```rust
-use std::path::Path;
-use osu_map_analyzer::{analyze, rosu_map};
-
-fn main() {
-    let path = Path::new("path/to/your/beatmap.osu");
-    let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
-
-    let mut stream_analyzer = analyze::Stream::new(map.clone());
-    let stream_analysis = stream_analyzer.analyze();
-    println!("Stream analysis: {:#?}", stream_analysis);
-
-    let mut jump_analyzer = analyze::Jump::new(map);
-    let jump_analysis = jump_analyzer.analyze();
-    println!("Jump analysis: {:#?}", jump_analysis);
-}
+```toml
+osu-map-analyzer = { version = "0.2.9", default-features = false }
 ```
 
-## Analysis Metrics
+## Structured analysis
 
-### Stream Analysis
+```rust,no_run
+use osu_map_analyzer::{AnalysisOptions, BeatmapAnalyzer};
 
-- `overall_confidence`: How confident the library is that it's a stream map
-- `short_streams`: Number of short streams (6-9 notes)
-- `medium_streams`: Number of medium streams (10-19 notes)
-- `long_streams`: Number of long streams (20+ notes)
-- `max_stream_length`: Length of the longest stream
-- `stream_density`: Density of streams in the map
-- `bpm_consistency`: Consistency of the BPM in streams (this doesn't really mean much)
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+let analysis = BeatmapAnalyzer::from_path("map.osu")?
+    .analyze(AnalysisOptions::default())?;
 
-### Jump Analysis
+println!("main BPM: {}", analysis.timing.main_bpm);
+println!("tags: {:?}", analysis.tags);
 
-- `overall_confidence`: How confident the library is that it's a jump map
-- `total_jump_count`: Total number of jumps
-- `max_jump_length`: Length of the longest jump sequence
-- `long_jumps`: Number of long jumps (12+ notes)
-- `medium_jumps`: Number of medium jumps (7-11 notes)
-- `short_jumps`: Number of short jumps (4-6 notes)
-- `jump_density`: Density of jumps in the map
-- `bpm_consistency`: Consistency of the BPM in jumps (this doesn't really mean much)
+let features = analysis.to_feature_vector();
+assert_eq!(features.names.len(), features.values.len());
+# Ok(())
+# }
+```
+
+`AnalysisOptions::default()` uses 10-second timeline sections. Times and durations in
+the result are milliseconds; rates such as `notes_per_second` are per second.
+
+The result contains:
+
+- metadata, difficulty settings, drain time, total length, and object counts
+- weighted/main/min/max BPM and timing/SV changes
+- object ratios, density, spacing, and jump-distance distributions
+- rhythm entropy, interval frequencies, burstiness, and repeated patterns
+- aim, speed, stamina, stream/burst, and slider metrics
+- configurable chart-ready timeline sections
+- deterministic tags and a named, ordered feature vector
+
+Pressure, complexity, and tag values are intentionally heuristic. They are stable
+feature signals, not replacements for osu! difficulty or performance calculations.
+
+Analyze a map from the command line:
+
+```bash
+cargo run -- path/to/map.osu
+cargo run -- --details path/to/map.osu
+cargo run -- --json path/to/map.osu
+```
+
+Install the standalone CLI from crates.io with `cargo install osu-map-analyzer`, then
+run the same commands through `osu-map-analyzer` directly.
+
+Compact human output is the default. `--details` prints grouped metrics and only the
+top five speed, aim, and density sections. Raw arrays are emitted only with `--json`.
+
+Analysis results also provide `compact_report()`, `detailed_report()`, and `validate()`.
+Validation checks structural consistency, finite values, section ordering and coverage,
+documented pressure-score ranges, and redundant adjacent BPM sections.
+
+## Existing analyzers
+
+The original `analyze::Jump` and `analyze::Stream` APIs remain available for callers
+that use their classification-oriented output.
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0 - see [LICENSE](LICENSE) for details.
-
-## Acknowledgements
-
-This library uses [rosu-map](https://github.com/MaxOhn/rosu-map) for parsing osu! beatmaps.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
