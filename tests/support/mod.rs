@@ -53,8 +53,16 @@ pub fn slider_with_spans(
 pub fn circle_run(count: usize, interval_ms: f64, spacing: f64) -> Beatmap {
     let objects = (0..count)
         .map(|index| {
-            let x = if index % 2 == 0 { 128.0 } else { 128.0 + spacing };
-            circle(x.round() as i32, 192, (index as f64 * interval_ms).round() as i32)
+            let x = if index % 2 == 0 {
+                128.0
+            } else {
+                128.0 + spacing
+            };
+            circle(
+                x.round() as i32,
+                192,
+                (index as f64 * interval_ms).round() as i32,
+            )
         })
         .collect::<Vec<_>>();
 
@@ -137,13 +145,7 @@ pub fn mixed_map() -> Beatmap {
     let mut objects = (0..8)
         .map(|index| circle(128 + (index % 2) * 40, 192, index * 125))
         .collect::<Vec<_>>();
-    objects.extend((0..6).map(|index| {
-        circle(
-            64 + (index % 2) * 220,
-            192,
-            2_000 + index * 250,
-        )
-    }));
+    objects.extend((0..6).map(|index| circle(64 + (index % 2) * 220, 192, 2_000 + index * 250)));
     objects.push(slider_with_spans(64, 192, 4_000, 264, 192, 2, 200));
 
     beatmap(&["0,500,4,2,1,50,1,0"], &objects)

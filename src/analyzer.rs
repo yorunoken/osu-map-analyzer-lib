@@ -22,10 +22,12 @@ impl<'map> Analyzer<'map> {
     }
 
     /// Create an analyzer with validated custom thresholds.
-    pub fn with_config(
-        map: &'map Beatmap,
-        config: AnalysisConfig,
-    ) -> Result<Self, AnalysisError> {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnalysisError::InvalidConfig`] when any threshold is not
+    /// finite or falls outside its documented range.
+    pub fn with_config(map: &'map Beatmap, config: AnalysisConfig) -> Result<Self, AnalysisError> {
         Ok(Self {
             map,
             config: config.validate()?,
@@ -33,6 +35,12 @@ impl<'map> Analyzer<'map> {
     }
 
     /// Analyze the beatmap.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnalysisError::UnsupportedMode`] for non-osu!standard maps,
+    /// [`AnalysisError::EmptyMap`] when there are no playable circles or
+    /// sliders, or [`AnalysisError::InvalidConfig`] for invalid thresholds.
     pub fn analyze(&self) -> Result<MapAnalysis, AnalysisError> {
         if self.map.mode != GameMode::Osu {
             return Err(AnalysisError::UnsupportedMode(self.map.mode));

@@ -24,8 +24,8 @@ pub(crate) fn peak_for_objects(
 
         seen[object_index] = true;
         let time = features.objects[object_index].start_time;
-        let section = ((time - features.start_time).max(0.0) / config.peak_window_ms).floor()
-            as usize;
+        let section =
+            ((time - features.start_time).max(0.0) / config.peak_window_ms).floor() as usize;
 
         if let Some(count) = counts.get_mut(section) {
             *count += 1;
@@ -44,10 +44,8 @@ pub(crate) fn peak_for_objects(
             }
         })
         .max_by(|left, right| {
-            left.score.total_cmp(&right.score).then_with(|| {
-                right
-                    .start_time_ms
-                    .total_cmp(&left.start_time_ms)
-            })
+            left.score
+                .total_cmp(&right.score)
+                .then_with(|| right.start_time_ms.total_cmp(&left.start_time_ms))
         })
 }

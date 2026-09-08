@@ -97,16 +97,23 @@ pub(crate) fn detect(features: &FeatureSet, config: &AnalysisConfig) -> TechDete
 }
 
 fn quantized_rhythm(beats: f64) -> usize {
-    const RHYTHMS: [f64; 10] = [0.125, 1.0 / 6.0, 0.25, 1.0 / 3.0, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0];
+    const RHYTHMS: [f64; 10] = [
+        0.125,
+        1.0 / 6.0,
+        0.25,
+        1.0 / 3.0,
+        0.5,
+        0.75,
+        1.0,
+        1.5,
+        2.0,
+        4.0,
+    ];
 
     RHYTHMS
         .iter()
         .enumerate()
-        .min_by(|(_, left), (_, right)| {
-            (beats - **left)
-                .abs()
-                .total_cmp(&(beats - **right).abs())
-        })
+        .min_by(|(_, left), (_, right)| (beats - **left).abs().total_cmp(&(beats - **right).abs()))
         .map_or(0, |(index, _)| index)
 }
 

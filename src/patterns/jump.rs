@@ -13,8 +13,8 @@ pub(crate) fn detect(
     let mut run: Vec<usize> = Vec::new();
 
     for (index, transition) in features.transitions.iter().enumerate() {
-        let jump = !stream_edges.get(index).copied().unwrap_or(false)
-            && is_jump(transition, config);
+        let jump =
+            !stream_edges.get(index).copied().unwrap_or(false) && is_jump(transition, config);
         let continuous = run.last().is_none_or(|&previous_index| {
             features.transitions[previous_index].to == transition.from
         });
@@ -63,8 +63,7 @@ impl Accumulator {
         self.notes += note_count;
         self.longest = self.longest.max(note_count);
         self.edge_count += run.len();
-        self.object_indices
-            .push(features.transitions[run[0]].from);
+        self.object_indices.push(features.transitions[run[0]].from);
 
         for &edge in run {
             let transition = features.transitions[edge];

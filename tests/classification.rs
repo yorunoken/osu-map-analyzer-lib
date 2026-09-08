@@ -30,27 +30,20 @@ fn rankings_are_complete_descending_and_stable() {
     let result = Analyzer::new(&map).analyze().unwrap();
 
     assert_eq!(result.patterns.len(), 5);
-    assert!(
-        result
-            .patterns
-            .windows(2)
-            .all(|pair| pair[0].score >= pair[1].score)
-    );
+    assert!(result
+        .patterns
+        .windows(2)
+        .all(|pair| pair[0].score >= pair[1].score));
     assert_eq!(result.primary, Some(result.patterns[0].pattern));
-    assert!(
-        result
-            .patterns
-            .iter()
-            .all(|entry| (0.0..=1.0).contains(&entry.score))
-    );
+    assert!(result
+        .patterns
+        .iter()
+        .all(|entry| (0.0..=1.0).contains(&entry.score)));
 }
 
 #[test]
 fn a_patternless_map_has_no_primary_pattern() {
-    let map = support::beatmap(
-        &["0,500,4,2,1,50,1,0"],
-        &[support::circle(256, 192, 0)],
-    );
+    let map = support::beatmap(&["0,500,4,2,1,50,1,0"], &[support::circle(256, 192, 0)]);
     let result = Analyzer::new(&map).analyze().unwrap();
 
     assert_eq!(result.primary, None);
@@ -70,12 +63,7 @@ fn slider_peak_identifies_the_busy_window() {
             support::slider(64, 192, 4_700, 164, 192),
         ],
     );
-    let peak = Analyzer::new(&map)
-        .analyze()
-        .unwrap()
-        .slider
-        .peak
-        .unwrap();
+    let peak = Analyzer::new(&map).analyze().unwrap().slider.peak.unwrap();
 
     assert_eq!(peak.start_time_ms, 4_000.0);
     assert_eq!(peak.score, 1.0);

@@ -3,68 +3,90 @@
 
 # osu-map-analyzer
 
-A Rust library for analyzing osu! beatmaps, and determines what class it is (stream, jump, tech, etc).
+A deterministic Rust library for classifying patterns in osu!standard beatmaps.
+
+The analyzer uses timing changes at each object, distances normalized by circle
+size, slider travel, rhythm variation, movement angles, and fixed-duration peak
+windows. It reports comparable jump, stream, burst, slider, and tech scores plus
+the measurements behind each score.
 
 ## Installation
 
-Add this to your `Cargo.toml`:
+```toml
+[dependencies]
+osu-map-analyzer = "0.3"
+```
+
+Enable `serde` when analysis results need to be serialized:
 
 ```toml
 [dependencies]
-osu-map-analyzer = "0.2.9"
+osu-map-analyzer = { version = "0.3", features = ["serde"] }
 ```
-
-or simply run `cargo add osu-map-analyzer` for the latest version
 
 ## Usage
 
-Here's a basic example of how to use the library:
+```rust,no_run
+use osu_map_analyzer::{rosu_map::Beatmap, Analyzer, Pattern};
 
-```rust
-use std::path::Path;
-use osu_map_analyzer::{analyze, rosu_map};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let map = Beatmap::from_path("path/to/beatmap.osu")?;
+    let analysis = Analyzer::new(&map).analyze()?;
 
-fn main() {
-    let path = Path::new("path/to/your/beatmap.osu");
-    let map = rosu_map::from_path::<rosu_map::Beatmap>(path).unwrap();
+    if analysis.primary == Some(Pattern::Stream) {
+        println!("longest stream: {} notes", analysis.stream.longest);
+    }
 
-    let mut stream_analyzer = analyze::Stream::new(map.clone());
-    let stream_analysis = stream_analyzer.analyze();
-    println!("Stream analysis: {:#?}", stream_analysis);
+    for entry in &analysis.patterns {
+        println!("{:?}: {:.3}", entry.pattern, entry.score);
+    }
 
-    let mut jump_analyzer = analyze::Jump::new(map);
-    let jump_analysis = jump_analyzer.analyze();
-    println!("Jump analysis: {:#?}", jump_analysis);
+    Ok(())
 }
 ```
 
-## Analysis Metrics
+Use `Analyzer::with_config` to tune thresholds while preserving validation:
 
-### Stream Analysis
+```rust,no_run
+use osu_map_analyzer::{rosu_map::Beatmap, AnalysisConfig, Analyzer};
 
-- `overall_confidence`: How confident the library is that it's a stream map
-- `short_streams`: Number of short streams (6-9 notes)
-- `medium_streams`: Number of medium streams (10-19 notes)
-- `long_streams`: Number of long streams (20+ notes)
-- `max_stream_length`: Length of the longest stream
-- `stream_density`: Density of streams in the map
-- `bpm_consistency`: Consistency of the BPM in streams (this doesn't really mean much)
+# fn example(map: &Beatmap) -> Result<(), Box<dyn std::error::Error>> {
+let config = AnalysisConfig {
+    stream_min_notes: 8,
+    jump_min_distance: 3.0,
+    ..AnalysisConfig::default()
+};
 
-### Jump Analysis
+let analysis = Analyzer::with_config(map, config)?.analyze()?;
+# Ok(())
+# }
+```
 
-- `overall_confidence`: How confident the library is that it's a jump map
-- `total_jump_count`: Total number of jumps
-- `max_jump_length`: Length of the longest jump sequence
-- `long_jumps`: Number of long jumps (12+ notes)
-- `medium_jumps`: Number of medium jumps (7-11 notes)
-- `short_jumps`: Number of short jumps (4-6 notes)
-- `jump_density`: Density of jumps in the map
-- `bpm_consistency`: Consistency of the BPM in jumps (this doesn't really mean much)
+## Result model
+
+Every pattern score is clamped to `0.0..=1.0` and ranked in descending order.
+These values are deterministic heuristic strengths, not statistical confidence
+or difficulty ratings. Scores are best used to compare characteristics within a
+map or across maps analyzed with the same crate version and configuration.
+
+`Peak` identifies the strongest configured time window for each detected
+pattern. Detailed result structs also expose counts, run lengths, normalized
+distances, intervals, slider travel, and complexity components.
+
+Only osu!standard is supported. Other game modes return
+`AnalysisError::UnsupportedMode`.
+
+## Version 0.3 migration
+
+The former mutable `analyze::Stream` and `analyze::Jump` entry points have been
+replaced by one borrowed, immutable `Analyzer`. The new result is structured,
+fully ranked, optionally serializable, and includes burst, slider, and tech
+analysis.
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0 - see [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 
 ## Acknowledgements
 
-This library uses [rosu-map](https://github.com/MaxOhn/rosu-map) for parsing osu! beatmaps.
+Beatmap parsing is provided by [rosu-map](https://github.com/MaxOhn/rosu-map).

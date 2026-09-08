@@ -3,14 +3,23 @@ use crate::AnalysisError;
 /// Thresholds used by [`crate::Analyzer`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AnalysisConfig {
+    /// Maximum wall-clock interval between notes in a fast tap run.
     pub fast_interval_ms: f64,
+    /// Maximum local beat interval between notes in a fast tap run.
     pub fast_interval_beats: f64,
+    /// Maximum relative interval deviation allowed inside one tap run.
     pub rhythm_tolerance: f64,
+    /// Minimum number of notes that turns a fast tap run into a stream.
     pub stream_min_notes: usize,
+    /// Minimum jump distance measured in circle radii.
     pub jump_min_distance: f64,
+    /// Maximum wall-clock interval between notes in a jump sequence.
     pub jump_max_interval_ms: f64,
+    /// Maximum local beat interval between notes in a jump sequence.
     pub jump_max_interval_beats: f64,
+    /// Duration of the sliding window used to calculate pattern peaks.
     pub peak_window_ms: f64,
+    /// Minimum top score required to choose a primary pattern.
     pub primary_score_min: f64,
 }
 

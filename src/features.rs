@@ -54,8 +54,13 @@ impl FeatureSet {
         let circle_radius = (54.4 - 4.48 * f64::from(map.circle_size)).max(1.0);
         let start_time = source_objects
             .iter()
-            .find_map(|object| playable_parts(object).map(|_| object.start_time))
-            .filter(|time| time.is_finite())
+            .filter_map(|object| {
+                let (position, _) = playable_parts(object)?;
+
+                (object.start_time.is_finite() && position.x.is_finite() && position.y.is_finite())
+                    .then_some(object.start_time)
+            })
+            .next()
             .unwrap_or(0.0);
         let mut curve_buffers = CurveBuffers::default();
         let mut objects = Vec::new();
@@ -135,12 +140,15 @@ impl FeatureSet {
                 if delta_ms.is_finite() && delta_ms > 0.0 {
                     let movement = position - previous_object.position;
                     let normalized_distance = f64::from(movement.length()) / circle_radius;
-                    let angle_degrees = transitions.last().and_then(|previous_transition| {
-                        (previous_transition.to == from).then(|| {
-                            let earlier = objects[previous_transition.from].position;
-                            movement_angle(previous_object.position - earlier, movement)
+                    let angle_degrees = transitions
+                        .last()
+                        .and_then(|previous_transition| {
+                            (previous_transition.to == from).then(|| {
+                                let earlier = objects[previous_transition.from].position;
+                                movement_angle(previous_object.position - earlier, movement)
+                            })
                         })
-                    }).flatten();
+                        .flatten();
 
                     transitions.push(Transition {
                         from,
@@ -259,10 +267,7 @@ mod tests {
 
     #[test]
     fn normalizes_distance_by_circle_radius() {
-        let map = beatmap(
-            &["0,500,4,2,1,50,1,0"],
-            &["0,192,0,1,0", "100,192,250,1,0"],
-        );
+        let map = beatmap(&["0,500,4,2,1,50,1,0"], &["0,192,0,1,0", "100,192,250,1,0"]);
 
         let features = FeatureSet::extract(&map, &AnalysisConfig::default());
 
@@ -273,18 +278,12 @@ mod tests {
     fn spinner_breaks_a_transition_sequence() {
         let map = beatmap(
             &["0,500,4,2,1,50,1,0"],
-            &[
-                "64,192,0,1,0",
-                "256,192,125,8,0,375",
-                "128,192,500,1,0",
-            ],
+            &["64,192,0,1,0", "256,192,125,8,0,375", "128,192,500,1,0"],
         );
 
-        assert!(
-            FeatureSet::extract(&map, &AnalysisConfig::default())
-                .transitions
-                .is_empty()
-        );
+        assert!(FeatureSet::extract(&map, &AnalysisConfig::default())
+            .transitions
+            .is_empty());
     }
 
     #[test]
@@ -300,5 +299,19 @@ mod tests {
 
         assert_eq!(features.objects[0].start_time, 0.0);
         assert_eq!(map.hit_objects[0].start_time, original_first);
+    }
+
+    #[test]
+    fn non_finite_object_time_does_not_skew_duration() {
+        let mut map = beatmap(
+            &["0,500,4,2,1,50,1,0"],
+            &["64,192,0,1,0", "128,192,1000,1,0", "192,192,1250,1,0"],
+        );
+        map.hit_objects[0].start_time = f64::NEG_INFINITY;
+
+        let features = FeatureSet::extract(&map, &AnalysisConfig::default());
+
+        assert_eq!(features.start_time, 1_000.0);
+        assert_eq!(features.duration_ms, 250.0);
     }
 }

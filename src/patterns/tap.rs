@@ -142,8 +142,8 @@ impl Accumulator {
 
     fn into_burst(self, features: &FeatureSet, config: &AnalysisConfig) -> BurstAnalysis {
         let density = ratio(self.notes, features.circle_count);
-        let length_strength = (self.longest as f64 / (config.stream_min_notes - 1) as f64)
-            .clamp(0.0, 1.0);
+        let length_strength =
+            (self.longest as f64 / (config.stream_min_notes - 1) as f64).clamp(0.0, 1.0);
 
         BurstAnalysis {
             score: clamp_score(density * 0.7 + length_strength * 0.3),

@@ -1,14 +1,11 @@
 mod support;
 
-use osu_map_analyzer::{AnalysisConfig, AnalysisError, Analyzer};
 use osu_map_analyzer::rosu_map::section::general::GameMode;
+use osu_map_analyzer::{AnalysisConfig, AnalysisError, Analyzer};
 
 #[test]
 fn rejects_non_standard_maps() {
-    let mut map = support::beatmap(
-        &["0,500,4,2,1,50,1,0"],
-        &[support::circle(256, 192, 0)],
-    );
+    let mut map = support::beatmap(&["0,500,4,2,1,50,1,0"], &[support::circle(256, 192, 0)]);
     map.mode = GameMode::Mania;
 
     assert!(matches!(
@@ -26,10 +23,7 @@ fn rejects_an_empty_map() {
 
 #[test]
 fn rejects_non_positive_fast_interval() {
-    let map = support::beatmap(
-        &["0,500,4,2,1,50,1,0"],
-        &[support::circle(256, 192, 0)],
-    );
+    let map = support::beatmap(&["0,500,4,2,1,50,1,0"], &[support::circle(256, 192, 0)]);
     let config = AnalysisConfig {
         fast_interval_ms: 0.0,
         ..AnalysisConfig::default()
@@ -43,10 +37,7 @@ fn rejects_non_positive_fast_interval() {
 
 #[test]
 fn rejects_an_invalid_primary_score_floor() {
-    let map = support::beatmap(
-        &["0,500,4,2,1,50,1,0"],
-        &[support::circle(256, 192, 0)],
-    );
+    let map = support::beatmap(&["0,500,4,2,1,50,1,0"], &[support::circle(256, 192, 0)]);
     let config = AnalysisConfig {
         primary_score_min: 1.1,
         ..AnalysisConfig::default()

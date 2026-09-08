@@ -38,10 +38,7 @@ fn preserves_a_stream_across_a_bpm_change() {
         .enumerate()
         .map(|(index, &time)| support::circle(128 + (index % 2) as i32 * 40, 192, time))
         .collect::<Vec<_>>();
-    let map = support::beatmap(
-        &["0,500,4,2,1,50,1,0", "1000,250,4,2,1,50,1,0"],
-        &objects,
-    );
+    let map = support::beatmap(&["0,500,4,2,1,50,1,0", "1000,250,4,2,1,50,1,0"], &objects);
 
     assert_eq!(Analyzer::new(&map).analyze().unwrap().stream.longest, 8);
 }
