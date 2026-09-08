@@ -34,7 +34,6 @@ pub(crate) struct Transition {
     pub(crate) elapsed_beats: f64,
     pub(crate) normalized_distance: f64,
     pub(crate) angle_degrees: Option<f64>,
-    pub(crate) section: usize,
 }
 
 #[derive(Debug)]
@@ -100,7 +99,7 @@ impl FeatureSet {
                         (
                             duration.max(0.0),
                             slider.repeat_count.max(0) as usize,
-                            travel.max(0.0),
+                            (travel / circle_radius).max(0.0),
                             velocity,
                         )
                     }
@@ -154,11 +153,6 @@ impl FeatureSet {
                         ),
                         normalized_distance,
                         angle_degrees,
-                        section: section_index(
-                            previous_object.start_time,
-                            start_time,
-                            config.peak_window_ms,
-                        ),
                     });
                 }
             }
@@ -166,9 +160,9 @@ impl FeatureSet {
             previous = Some(to);
         }
 
-        let duration_ms = objects
-            .last()
-            .map_or(0.0, |object| (object.start_time - start_time).max(0.0));
+        let duration_ms = objects.iter().fold(0.0_f64, |duration, object| {
+            duration.max(object.start_time + object.slider_duration - start_time)
+        });
 
         Self {
             objects,

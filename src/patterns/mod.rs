@@ -1,7 +1,9 @@
 use crate::{features::FeatureSet, AnalysisConfig, Peak};
 
 pub(crate) mod jump;
+pub(crate) mod slider;
 pub(crate) mod tap;
+pub(crate) mod tech;
 
 pub(crate) fn peak_for_objects(
     features: &FeatureSet,
