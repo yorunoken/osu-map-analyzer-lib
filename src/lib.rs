@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod features;
 mod model;
+mod patterns;
 
 pub use analyzer::Analyzer;
 pub use config::AnalysisConfig;
