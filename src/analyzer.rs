@@ -1,9 +1,7 @@
-use rosu_map::{
-    section::{general::GameMode, hit_objects::HitObjectKind},
-    Beatmap,
-};
+use rosu_map::{section::general::GameMode, Beatmap};
 
 use crate::{
+    features::FeatureSet,
     AnalysisConfig, AnalysisError, BurstAnalysis, JumpAnalysis, MapAnalysis, SliderAnalysis,
     StreamAnalysis, TechAnalysis,
 };
@@ -42,21 +40,11 @@ impl<'map> Analyzer<'map> {
 
         self.config.validate()?;
 
-        let mut playable_times = self.map.hit_objects.iter().filter_map(|object| {
-            matches!(
-                object.kind,
-                HitObjectKind::Circle(_) | HitObjectKind::Slider(_)
-            )
-            .then_some(object.start_time)
-            .filter(|time| time.is_finite())
-        });
-        let Some(first_time) = playable_times.next() else {
+        let features = FeatureSet::extract(self.map, &self.config);
+
+        if features.objects.is_empty() {
             return Err(AnalysisError::EmptyMap);
-        };
-        let (object_count, last_time) = playable_times.fold(
-            (1, first_time),
-            |(count, last), time| (count + 1, last.max(time)),
-        );
+        }
 
         Ok(MapAnalysis {
             primary: None,
@@ -66,9 +54,9 @@ impl<'map> Analyzer<'map> {
             burst: BurstAnalysis::default(),
             slider: SliderAnalysis::default(),
             tech: TechAnalysis::default(),
-            object_count,
-            tap_object_count: object_count,
-            duration_ms: (last_time - first_time).max(0.0),
+            object_count: features.objects.len(),
+            tap_object_count: features.circle_count,
+            duration_ms: features.duration_ms,
         })
     }
 }

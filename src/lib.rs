@@ -3,6 +3,7 @@
 mod analyzer;
 mod config;
 mod error;
+mod features;
 mod model;
 
 pub use analyzer::Analyzer;
