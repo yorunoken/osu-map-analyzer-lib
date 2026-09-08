@@ -64,3 +64,9 @@ pub fn separated_circle_runs(lengths: &[usize], interval_ms: f64, gap_ms: f64) -
 
     beatmap(&["0,500,4,2,1,50,1,0"], &objects)
 }
+
+pub fn jump_pair_with_cs(circle_size: f32, spacing: f64) -> Beatmap {
+    let mut map = circle_run(2, 250.0, spacing);
+    map.circle_size = circle_size;
+    map
+}

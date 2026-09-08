@@ -2,8 +2,8 @@ use rosu_map::{section::general::GameMode, Beatmap};
 
 use crate::{
     features::FeatureSet,
-    patterns::tap,
-    AnalysisConfig, AnalysisError, JumpAnalysis, MapAnalysis, SliderAnalysis, TechAnalysis,
+    patterns::{jump, tap},
+    AnalysisConfig, AnalysisError, MapAnalysis, SliderAnalysis, TechAnalysis,
 };
 
 /// Analyzer for one borrowed osu!standard beatmap.
@@ -47,11 +47,12 @@ impl<'map> Analyzer<'map> {
         }
 
         let tap = tap::detect(&features, &self.config);
+        let jump = jump::detect(&features, &tap.stream_edges, &self.config);
 
         Ok(MapAnalysis {
             primary: None,
             patterns: Vec::new(),
-            jump: JumpAnalysis::default(),
+            jump,
             stream: tap.stream,
             burst: tap.burst,
             slider: SliderAnalysis::default(),
