@@ -20,6 +20,7 @@ pub(crate) struct ObjectFeature {
     pub(crate) start_time: f64,
     pub(crate) position: Pos,
     pub(crate) kind: ObjectKind,
+    pub(crate) sequence: usize,
     pub(crate) slider_duration: f64,
     pub(crate) slider_repeats: usize,
     pub(crate) slider_travel: f64,
@@ -51,6 +52,7 @@ impl FeatureSet {
         let mut source_objects: Vec<_> = map.hit_objects.iter().collect();
         source_objects.sort_by(|left, right| left.start_time.total_cmp(&right.start_time));
 
+        let timing = TimingLookup::new(&map.control_points.timing_points);
         let circle_radius = (54.4 - 4.48 * f64::from(map.circle_size)).max(1.0);
         let start_time = source_objects
             .iter()
@@ -66,22 +68,26 @@ impl FeatureSet {
         let mut objects = Vec::new();
         let mut transitions: Vec<Transition> = Vec::new();
         let mut previous = None;
+        let mut sequence = 0_usize;
         let mut circle_count = 0;
         let mut section_object_counts = Vec::new();
 
         for object in source_objects {
             if !object.start_time.is_finite() {
                 previous = None;
+                sequence = sequence.saturating_add(1);
                 continue;
             }
 
             let Some((position, kind)) = playable_parts(object) else {
                 previous = None;
+                sequence = sequence.saturating_add(1);
                 continue;
             };
 
             if !position.x.is_finite() || !position.y.is_finite() {
                 previous = None;
+                sequence = sequence.saturating_add(1);
                 continue;
             }
 
@@ -127,6 +133,7 @@ impl FeatureSet {
                 start_time: object.start_time,
                 position,
                 kind,
+                sequence,
                 slider_duration,
                 slider_repeats,
                 slider_travel,
@@ -154,11 +161,8 @@ impl FeatureSet {
                         from,
                         to,
                         delta_ms,
-                        elapsed_beats: elapsed_beats(
-                            &map.control_points.timing_points,
-                            previous_object.start_time,
-                            object.start_time,
-                        ),
+                        elapsed_beats: timing
+                            .elapsed_beats(previous_object.start_time, object.start_time),
                         normalized_distance,
                         angle_degrees,
                     });
@@ -206,30 +210,64 @@ fn movement_angle(previous: Pos, current: Pos) -> Option<f64> {
     Some(cosine.acos().to_degrees())
 }
 
-fn elapsed_beats(points: &[TimingPoint], start: f64, end: f64) -> f64 {
-    let mut cursor = start;
-    let mut beat_len = active_beat_len(points, start);
-    let mut beats = 0.0;
-
-    for point in points
-        .iter()
-        .filter(|point| point.time > start && point.time < end)
-    {
-        beats += (point.time - cursor) / beat_len;
-        cursor = point.time;
-        beat_len = point.beat_len;
-    }
-
-    beats + (end - cursor) / beat_len
+#[derive(Clone, Copy)]
+struct TimingSection {
+    time: f64,
+    beat_len: f64,
+    beats_at_time: f64,
 }
 
-fn active_beat_len(points: &[TimingPoint], time: f64) -> f64 {
-    points
-        .iter()
-        .rev()
-        .find(|point| point.time <= time)
-        .or_else(|| points.first())
-        .map_or(TimingPoint::DEFAULT_BEAT_LEN, |point| point.beat_len)
+struct TimingLookup {
+    sections: Vec<TimingSection>,
+}
+
+impl TimingLookup {
+    fn new(points: &[TimingPoint]) -> Self {
+        let mut source = points
+            .iter()
+            .filter(|point| {
+                point.time.is_finite() && point.beat_len.is_finite() && point.beat_len > 0.0
+            })
+            .map(|point| (point.time, point.beat_len))
+            .collect::<Vec<_>>();
+        source.sort_by(|left, right| left.0.total_cmp(&right.0));
+
+        let mut sections = Vec::with_capacity(source.len());
+        let mut beats_at_time = 0.0;
+
+        for (index, &(time, beat_len)) in source.iter().enumerate() {
+            if index > 0 {
+                let (previous_time, previous_beat_len) = source[index - 1];
+                beats_at_time += (time - previous_time) / previous_beat_len;
+            }
+
+            sections.push(TimingSection {
+                time,
+                beat_len,
+                beats_at_time,
+            });
+        }
+
+        Self { sections }
+    }
+
+    fn elapsed_beats(&self, start: f64, end: f64) -> f64 {
+        self.beat_position(end) - self.beat_position(start)
+    }
+
+    fn beat_position(&self, time: f64) -> f64 {
+        let section_index = self
+            .sections
+            .partition_point(|section| section.time <= time);
+
+        if section_index == 0 {
+            let origin = self.sections.first().map_or(0.0, |section| section.time);
+            return (time - origin) / TimingPoint::DEFAULT_BEAT_LEN;
+        }
+
+        let section = self.sections[section_index - 1];
+        section.beats_at_time + (time - section.time) / section.beat_len
+    }
 }
 
 #[cfg(test)]
@@ -263,6 +301,18 @@ mod tests {
         let features = FeatureSet::extract(&map, &AnalysisConfig::default());
 
         assert!((features.transitions[0].elapsed_beats - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn uses_default_timing_before_the_first_timing_point() {
+        let map = beatmap(
+            &["1000,250,4,2,1,50,1,0"],
+            &["64,192,0,1,0", "128,192,125,1,0"],
+        );
+
+        let features = FeatureSet::extract(&map, &AnalysisConfig::default());
+
+        assert!((features.transitions[0].elapsed_beats - 0.125).abs() < 1e-9);
     }
 
     #[test]

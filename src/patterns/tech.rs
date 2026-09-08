@@ -58,21 +58,30 @@ pub(crate) fn detect(features: &FeatureSet, config: &AnalysisConfig) -> TechDete
         .collect::<Vec<_>>();
     object_indices.extend(slider_indices.iter().copied());
 
-    let slider_velocity_changes = slider_indices
-        .windows(2)
-        .filter(|pair| {
-            let left = features.objects[pair[0]].slider_velocity;
-            let right = features.objects[pair[1]].slider_velocity;
-            left.max(right) / left.min(right).max(f64::EPSILON) >= 1.25
-        })
-        .count();
+    let (slider_velocity_comparisons, slider_velocity_changes) =
+        slider_indices
+            .windows(2)
+            .fold((0_usize, 0_usize), |(comparisons, changes), pair| {
+                let left = features.objects[pair[0]];
+                let right = features.objects[pair[1]];
+
+                if left.sequence != right.sequence {
+                    return (comparisons, changes);
+                }
+
+                let changed = left.slider_velocity.max(right.slider_velocity)
+                    / left
+                        .slider_velocity
+                        .min(right.slider_velocity)
+                        .max(f64::EPSILON)
+                    >= 1.25;
+
+                (comparisons + 1, changes + usize::from(changed))
+            });
     let rhythm_complexity = ratio(rhythm_changes, rhythm_comparisons);
     let angle_complexity = ratio(complex_angles, measured_angles);
     let slider_share = ratio(slider_indices.len(), features.objects.len());
-    let velocity_complexity = ratio(
-        slider_velocity_changes,
-        slider_indices.len().saturating_sub(1),
-    );
+    let velocity_complexity = ratio(slider_velocity_changes, slider_velocity_comparisons);
     let score = (rhythm_complexity * 0.35
         + angle_complexity * 0.3
         + slider_share * 0.2
@@ -81,7 +90,20 @@ pub(crate) fn detect(features: &FeatureSet, config: &AnalysisConfig) -> TechDete
     object_indices.sort_unstable();
     object_indices.dedup();
     let objects = object_indices.len();
-    let segments = rhythm_changes + complex_angles + slider_velocity_changes;
+    let segments = object_indices
+        .iter()
+        .enumerate()
+        .filter(|&(position, &object_index)| {
+            if position == 0 {
+                return true;
+            }
+
+            let previous_index = object_indices[position - 1];
+            object_index != previous_index + 1
+                || features.objects[object_index].sequence
+                    != features.objects[previous_index].sequence
+        })
+        .count();
 
     TechDetection {
         analysis: TechAnalysis {

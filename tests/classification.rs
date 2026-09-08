@@ -17,11 +17,10 @@ fn slider_metrics_include_repeats_travel_and_duration() {
 fn tech_requires_combined_rhythm_and_geometry_evidence() {
     let simple = support::circle_run(16, 250.0, 180.0);
     let technical = support::technical_map();
+    let technical_analysis = Analyzer::new(&technical).analyze().unwrap();
 
-    assert!(
-        Analyzer::new(&technical).analyze().unwrap().tech.score
-            > Analyzer::new(&simple).analyze().unwrap().tech.score
-    );
+    assert!(technical_analysis.tech.score > Analyzer::new(&simple).analyze().unwrap().tech.score);
+    assert_eq!(technical_analysis.tech.slider_velocity_changes, 1);
 }
 
 #[test]
@@ -67,4 +66,46 @@ fn slider_peak_identifies_the_busy_window() {
 
     assert_eq!(peak.start_time_ms, 4_000.0);
     assert_eq!(peak.score, 1.0);
+}
+
+#[test]
+fn spinner_breaks_slider_velocity_changes() {
+    let map = support::beatmap(
+        &["0,500,4,2,1,50,1,0", "1000,-50,4,2,1,50,0,0"],
+        &[
+            support::slider(64, 192, 500, 164, 192),
+            "256,192,750,8,0,1100".to_owned(),
+            support::slider(256, 192, 1_250, 356, 192),
+        ],
+    );
+
+    assert_eq!(
+        Analyzer::new(&map)
+            .analyze()
+            .unwrap()
+            .tech
+            .slider_velocity_changes,
+        0
+    );
+}
+
+#[test]
+fn overlapping_tech_evidence_forms_one_contiguous_segment() {
+    let map = support::beatmap(
+        &["0,500,4,2,1,50,1,0"],
+        &[
+            support::circle(64, 64, 0),
+            support::circle(256, 64, 250),
+            support::circle(256, 256, 375),
+        ],
+    );
+    let result = Analyzer::new(&map).analyze().unwrap();
+    let tech = result
+        .patterns
+        .iter()
+        .find(|entry| entry.pattern == Pattern::Tech)
+        .unwrap();
+
+    assert_eq!(tech.objects, 2);
+    assert_eq!(tech.segments, 1);
 }

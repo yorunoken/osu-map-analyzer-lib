@@ -43,11 +43,13 @@ Every public result derives `Debug`, `Clone`, and `PartialEq`. Small value types
 
 ## Feature Extraction
 
-Analysis makes a single ordered pass over hit objects and timing points.
+Analysis orders hit objects once and builds a cumulative timing lookup once.
+Each transition then resolves its local beat position with binary search instead
+of rescanning every timing point.
 
 Playable objects are circles and slider heads. Spinners and mania holds break consecutive patterns and do not contribute to tap counts. Each playable object records start time, position, kind, slider duration, repeat count, path distance, and active slider velocity.
 
-Each adjacent playable pair becomes a transition only when no spinner or hold occurs between them. A transition records elapsed milliseconds, elapsed beats, normalized distance, turning angle when a previous transition exists, and the timing section it occupies.
+Each adjacent playable pair becomes a transition only when no spinner or hold occurs between them. A transition records elapsed milliseconds, elapsed beats, normalized distance, and turning angle when a previous transition exists. Playable objects retain sequence membership, and fixed peak-section counts are collected during extraction.
 
 Elapsed beats are integrated across every uninherited timing point crossed by the interval. This is the central correction over the current implementation, which assumes one dominant BPM for the whole map.
 

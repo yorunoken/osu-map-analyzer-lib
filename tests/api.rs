@@ -48,3 +48,66 @@ fn rejects_an_invalid_primary_score_floor() {
         Err(AnalysisError::InvalidConfig("primary_score_min"))
     ));
 }
+
+#[test]
+fn rejects_each_remaining_invalid_config_field() {
+    let map = support::beatmap(&["0,500,4,2,1,50,1,0"], &[support::circle(256, 192, 0)]);
+    let cases = [
+        (
+            "fast_interval_beats",
+            AnalysisConfig {
+                fast_interval_beats: f64::NAN,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "rhythm_tolerance",
+            AnalysisConfig {
+                rhythm_tolerance: 1.1,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "stream_min_notes",
+            AnalysisConfig {
+                stream_min_notes: 3,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "jump_min_distance",
+            AnalysisConfig {
+                jump_min_distance: 0.0,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "jump_max_interval_ms",
+            AnalysisConfig {
+                jump_max_interval_ms: f64::INFINITY,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "jump_max_interval_beats",
+            AnalysisConfig {
+                jump_max_interval_beats: -1.0,
+                ..AnalysisConfig::default()
+            },
+        ),
+        (
+            "peak_window_ms",
+            AnalysisConfig {
+                peak_window_ms: 0.0,
+                ..AnalysisConfig::default()
+            },
+        ),
+    ];
+
+    for (field, config) in cases {
+        assert_eq!(
+            Analyzer::with_config(&map, config).err(),
+            Some(AnalysisError::InvalidConfig(field))
+        );
+    }
+}

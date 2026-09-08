@@ -17,7 +17,7 @@ pub struct AnalysisConfig {
     pub jump_max_interval_ms: f64,
     /// Maximum local beat interval between notes in a jump sequence.
     pub jump_max_interval_beats: f64,
-    /// Duration of the sliding window used to calculate pattern peaks.
+    /// Duration of each fixed section used to calculate pattern peaks.
     pub peak_window_ms: f64,
     /// Minimum top score required to choose a primary pattern.
     pub primary_score_min: f64,

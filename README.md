@@ -24,6 +24,8 @@ Enable `serde` when analysis results need to be serialized:
 osu-map-analyzer = { version = "0.3", features = ["serde"] }
 ```
 
+The legacy `serialize` feature remains an alias for `serde`.
+
 ## Usage
 
 ```rust,no_run
@@ -62,6 +64,20 @@ let analysis = Analyzer::with_config(map, config)?.analyze()?;
 # }
 ```
 
+Default thresholds:
+
+| Setting | Default | Meaning |
+| --- | ---: | --- |
+| `fast_interval_ms` | 200 ms | Fast-tap wall-clock ceiling |
+| `fast_interval_beats` | 0.375 beats | Fast-tap local beat ceiling |
+| `rhythm_tolerance` | 0.2 | Relative interval variation inside a tap run |
+| `stream_min_notes` | 6 | Notes required for a stream |
+| `jump_min_distance` | 2.5 radii | Minimum normalized jump spacing |
+| `jump_max_interval_ms` | 600 ms | Jump wall-clock ceiling |
+| `jump_max_interval_beats` | 1.25 beats | Jump local beat ceiling |
+| `peak_window_ms` | 2000 ms | Fixed peak-section duration |
+| `primary_score_min` | 0.15 | Minimum score for a primary pattern |
+
 ## Result model
 
 Every pattern score is clamped to `0.0..=1.0` and ranked in descending order.
@@ -74,7 +90,9 @@ pattern. Detailed result structs also expose counts, run lengths, normalized
 distances, intervals, slider travel, and complexity components.
 
 Only osu!standard is supported. Other game modes return
-`AnalysisError::UnsupportedMode`.
+`AnalysisError::UnsupportedMode`. A map without playable circles or sliders
+returns `AnalysisError::EmptyMap`, and invalid custom thresholds return
+`AnalysisError::InvalidConfig`.
 
 ## Version 0.3 migration
 
